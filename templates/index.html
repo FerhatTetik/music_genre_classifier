@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tür Tahmini</title>
+</head>
+<body>
+    <h1>MP3 Tür Tahmini</h1>
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".mp3,.wav">
+        <input type="submit" value="Tahmin Et">
+    </form>
+
+    {% if genre %}
+        <h2>Tahmini Tür: {{ genre }}</h2>
+    {% endif %}
+</body>
+</html> 
