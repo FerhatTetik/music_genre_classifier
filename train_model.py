@@ -1,91 +1,55 @@
 import os
 import numpy as np
-import joblib
 import tensorflow as tf
-from tensorflow.keras import layers, models
-from sklearn.model_selection import train_test_split
+import joblib
 from sklearn.preprocessing import LabelEncoder
 from utils.extract_features import extract_features
 
-DATASET_PATH = 'dataset/'  # klasör içinde her klasör bir tür: pop, arabesk, klasik
+# Dataset yolu
+dataset_path = "dataset"
 
-def load_data():
-    features = []
-    labels = []
+# Veri ve etiketleri topla
+X = []
+y = []
 
-    for genre in os.listdir(DATASET_PATH):
-        genre_folder = os.path.join(DATASET_PATH, genre)
-        if not os.path.isdir(genre_folder):
-            continue
-
-        for filename in os.listdir(genre_folder):
-            if filename.endswith('.wav') or filename.endswith('.mp3'):
-                file_path = os.path.join(genre_folder, filename)
+genres = os.listdir(dataset_path)
+for genre in genres:
+    genre_path = os.path.join(dataset_path, genre)
+    if os.path.isdir(genre_path):
+        for file in os.listdir(genre_path):
+            if file.endswith(".mp3"):
+                file_path = os.path.join(genre_path, file)
                 try:
-                    feature = extract_features(file_path)
-                    features.append(feature)
-                    labels.append(genre)
+                    features = extract_features(file_path)
+                    X.append(features)
+                    y.append(genre)
                 except Exception as e:
-                    print(f"Hata: {file_path} - {e}")
+                    print(f"Hata: {file_path} - {str(e)}")
 
-    return np.array(features), np.array(labels)
+X = np.array(X)
+y = np.array(y)
 
-def create_model(input_shape, num_classes):
-    model = models.Sequential([
-        layers.Reshape((input_shape, 1), input_shape=(input_shape,)),
-        layers.Conv1D(32, 3, activation='relu', padding='same'),
-        layers.MaxPooling1D(2),
-        layers.Conv1D(64, 3, activation='relu', padding='same'),
-        layers.GlobalAveragePooling1D(),
-        layers.Dense(32, activation='relu'),
-        layers.Dropout(0.3),
-        layers.Dense(num_classes, activation='softmax')
-    ])
-    return model
+# Label encoding
+label_encoder = LabelEncoder()
+y_encoded = label_encoder.fit_transform(y)
+joblib.dump(label_encoder, "models/label_encoder.pkl")
 
-def train_and_save():
-    X, y = load_data()
-    
-    # Etiketleri sayısallaştır
-    label_encoder = LabelEncoder()
-    y_encoded = label_encoder.fit_transform(y)
-    
-    # One-hot encoding
-    y_onehot = tf.keras.utils.to_categorical(y_encoded)
-    
-    # Veriyi böl
-    X_train, X_test, y_train, y_test = train_test_split(X, y_onehot, test_size=0.2, random_state=42)
-    
-    # Modeli oluştur
-    model = create_model(X.shape[1], len(label_encoder.classes_))
-    
-    # Modeli derle
-    model.compile(optimizer='adam',
-                 loss='categorical_crossentropy',
-                 metrics=['accuracy'])
-    
-    # Early stopping ekle
-    early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor='val_loss',
-        patience=5,
-        restore_best_weights=True
-    )
-    
-    # Modeli eğit
-    history = model.fit(X_train, y_train,
-                       epochs=30,
-                       batch_size=16,
-                       validation_data=(X_test, y_test),
-                       callbacks=[early_stopping])
-    
-    # Test seti üzerinde değerlendir
-    test_loss, test_acc = model.evaluate(X_test, y_test)
-    print(f"\nTest doğruluğu: {test_acc:.2f}")
-    
-    # Modeli ve etiket kodlayıcıyı kaydet
-    model.save("model/genre_model.h5")
-    joblib.dump(label_encoder, "model/label_encoder.pkl")
-    print("Model kaydedildi!")
+# Ölçekleme
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+joblib.dump(scaler, "models/scaler.pkl")
 
-if __name__ == "__main__":
-    train_and_save() 
+# Model tanımı
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Dense(128, activation='relu', input_shape=(X_scaled.shape[1],)),
+    tf.keras.layers.Dense(64, activation='relu'),
+    tf.keras.layers.Dense(len(np.unique(y_encoded)), activation='softmax')
+])
+
+model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+model.fit(X_scaled, y_encoded, epochs=30, batch_size=16)
+
+# Modeli kaydet
+model.save("models/model_20250423_2155.h5")
+print("Model yeniden eğitildi ve kaydedildi.")
